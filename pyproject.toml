@@ -1,0 +1,18 @@
+[project]
+name = "good-life-assistant"
+version = "0.1.0"
+description = "生活助手 Agent - 可插拔模块化智能助手"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "langchain>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "langgraph>=0.2.0",
+    "futu-api>=9.6.0",
+    "yfinance>=0.2.0",
+    "pandas>=2.0.0",
+    "numpy>=1.26.0",
+    "python-dotenv>=1.0.0",
+    "pydantic-settings>=2.0.0",
+]

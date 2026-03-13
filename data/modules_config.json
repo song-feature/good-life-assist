@@ -1,0 +1,11 @@
+{
+  "stock": {
+    "enabled": true,
+    "config": {
+      "futu_host": "127.0.0.1",
+      "futu_port": 11111,
+      "market": "US",
+      "env": "REAL"
+    }
+  }
+}
