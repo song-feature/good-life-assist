@@ -5,7 +5,6 @@ import { useStockStore } from '../../stores/stockStore';
 import { MessageList } from '../chat/MessageList';
 import { ChatInput } from '../chat/ChatInput';
 import { Bot, Settings } from 'lucide-react';
-import { Link } from 'react-router-dom';
 
 export function ChatPanel() {
   const { messages, isStreaming, sendMessage } = useChatStore();
@@ -52,13 +51,15 @@ export function ChatPanel() {
           </div>
           <h1 className="text-base font-bold text-gray-900">生活助手</h1>
         </div>
-        <Link
-          to="/admin"
+        <a
+          href="/admin"
+          target="_blank"
+          rel="noopener noreferrer"
           className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-150"
           title="系统管理"
         >
           <Settings className="w-4.5 h-4.5" />
-        </Link>
+        </a>
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-4 bg-gray-50/50">
         {messages.length === 0 && (

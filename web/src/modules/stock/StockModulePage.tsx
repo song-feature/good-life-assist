@@ -1,21 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { useModuleStore } from '../../stores/moduleStore';
 import { PortfolioView } from './PortfolioView';
-import { StockChart } from './StockChart';
 import { OptionsChainView } from './OptionsChainView';
-import { BarChart3, TrendingUp, GitBranch } from 'lucide-react';
+import { BarChart3, ShieldAlert } from 'lucide-react';
 
 const TABS = [
   { id: 'show_portfolio', label: '持仓总览', icon: BarChart3 },
-  { id: 'show_trend', label: '走势图', icon: TrendingUp },
-  { id: 'show_options', label: '期权链', icon: GitBranch },
+  { id: 'show_options', label: '期权墙分析', icon: ShieldAlert },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
 
-// Map agent actions to tab ids (show_analysis merged into show_portfolio)
 function resolveTab(action: string | null): TabId {
-  if (action === 'show_analysis') return 'show_portfolio';
+  if (action === 'show_analysis' || action === 'show_trend') return 'show_portfolio';
   if (TABS.some((t) => t.id === action)) return action as TabId;
   return 'show_portfolio';
 }
@@ -25,7 +22,6 @@ export function StockModulePage() {
   const [currentTab, setCurrentTab] = useState<TabId>(resolveTab(activeAction));
   const prevAction = useRef(activeAction);
 
-  // Only sync when activeAction is changed by agent (not on every render)
   useEffect(() => {
     if (activeAction && activeAction !== prevAction.current) {
       setCurrentTab(resolveTab(activeAction));
@@ -57,7 +53,6 @@ export function StockModulePage() {
       </div>
       <div className="flex-1 overflow-auto p-5 bg-gray-50/70">
         {currentTab === 'show_portfolio' && <PortfolioView />}
-        {currentTab === 'show_trend' && <StockChart />}
         {currentTab === 'show_options' && <OptionsChainView />}
       </div>
     </div>

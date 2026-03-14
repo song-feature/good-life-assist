@@ -38,11 +38,11 @@ def calc_ma_series(closes, period):
     return result
 
 
-def analyze_ticker(ticker, market="US"):
+def analyze_ticker(ticker, market="US", period="1mo", interval="1d"):
     """分析单只股票：价格趋势 + 期权概况"""
     result = {"ticker": ticker}
 
-    hist = fetch_history_yfinance(ticker, market=market, period="1mo", interval="1d")
+    hist = fetch_history_yfinance(ticker, market=market, period=period, interval=interval)
     if hist and hist.get("close"):
         closes = hist["close"]
         dates = hist.get("dates", [])
@@ -79,39 +79,40 @@ def analyze_ticker(ticker, market="US"):
         result["ma5_series"] = []
         result["ma20_series"] = []
 
-    # 期权数据
-    try:
-        expiry_dates = fetch_option_expiry_dates(ticker, market=market)
-        if expiry_dates:
-            chain = fetch_option_chain(ticker, market=market, expiry_date=expiry_dates[0])
-            if chain:
-                calls = chain.get("calls", [])
-                puts = chain.get("puts", [])
-                calls_oi = sum(c.get("openInterest", 0) for c in calls)
-                puts_oi = sum(p.get("openInterest", 0) for p in puts)
-                pc_ratio = round(puts_oi / calls_oi, 2) if calls_oi > 0 else 0
+    # 期权数据 - 仅在默认周期时获取，避免日内请求的额外开销
+    if period == "1mo" and interval == "1d":
+        try:
+            expiry_dates = fetch_option_expiry_dates(ticker, market=market)
+            if expiry_dates:
+                chain = fetch_option_chain(ticker, market=market, expiry_date=expiry_dates[0])
+                if chain:
+                    calls = chain.get("calls", [])
+                    puts = chain.get("puts", [])
+                    calls_oi = sum(c.get("openInterest", 0) for c in calls)
+                    puts_oi = sum(p.get("openInterest", 0) for p in puts)
+                    pc_ratio = round(puts_oi / calls_oi, 2) if calls_oi > 0 else 0
 
-                result["options"] = {
-                    "expiry_date": expiry_dates[0],
-                    "calls_oi": calls_oi,
-                    "puts_oi": puts_oi,
-                    "put_call_ratio": pc_ratio,
-                }
+                    result["options"] = {
+                        "expiry_date": expiry_dates[0],
+                        "calls_oi": calls_oi,
+                        "puts_oi": puts_oi,
+                        "put_call_ratio": pc_ratio,
+                    }
 
-                if pc_ratio > 1.0:
-                    result["options_sentiment"] = "bearish"
-                elif pc_ratio < 0.7:
-                    result["options_sentiment"] = "bullish"
+                    if pc_ratio > 1.0:
+                        result["options_sentiment"] = "bearish"
+                    elif pc_ratio < 0.7:
+                        result["options_sentiment"] = "bullish"
+                    else:
+                        result["options_sentiment"] = "neutral"
                 else:
-                    result["options_sentiment"] = "neutral"
+                    result["options"] = None
+                    result["options_sentiment"] = "no_data"
             else:
                 result["options"] = None
-                result["options_sentiment"] = "no_data"
-        else:
+                result["options_sentiment"] = "no_options"
+        except Exception as e:
             result["options"] = None
-            result["options_sentiment"] = "no_options"
-    except Exception as e:
-        result["options"] = None
-        result["options_sentiment"] = f"error: {e}"
+            result["options_sentiment"] = f"error: {e}"
 
     return result

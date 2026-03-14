@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchJSON, putJSON, deleteJSON } from '../../api/client';
 import {
-  Settings, ToggleLeft, ToggleRight, ArrowLeft, Save, Brain,
-  ScrollText, RefreshCw, Trash2, Search,
+  Settings, ToggleLeft, ToggleRight, ArrowLeft, Brain,
+  ScrollText, RefreshCw, Trash2, Search, ChevronRight,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -44,8 +44,6 @@ export function AdminPage() {
   // ---- settings state ----
   const [modules, setModules] = useState<ModuleInfo[]>([]);
   const [llmConfig, setLLMConfig] = useState<LLMConfig | null>(null);
-  const [editingModule, setEditingModule] = useState<string | null>(null);
-  const [editConfig, setEditConfig] = useState<Record<string, unknown>>({});
 
   // ---- logs state ----
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -99,14 +97,6 @@ export function AdminPage() {
     setModules((prev) =>
       prev.map((m) => (m.module_id === moduleId ? { ...m, enabled } : m)),
     );
-  };
-
-  const saveConfig = async (moduleId: string) => {
-    await putJSON(`/admin/modules/${moduleId}/config`, editConfig);
-    setModules((prev) =>
-      prev.map((m) => (m.module_id === moduleId ? { ...m, config: editConfig } : m)),
-    );
-    setEditingModule(null);
   };
 
   return (
@@ -231,47 +221,12 @@ export function AdminPage() {
                   </div>
                   <p className="text-xs text-gray-500 mb-3 leading-relaxed">{mod.description}</p>
 
-                  {editingModule === mod.module_id ? (
-                    <div className="border-t border-gray-100 pt-3 mt-1">
-                      {Object.entries(editConfig).map(([key, val]) => (
-                        <div key={key} className="flex items-center gap-2 mb-2">
-                          <label className="text-xs text-gray-500 w-28 shrink-0 font-mono">{key}</label>
-                          <input
-                            className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-                            value={String(val ?? '')}
-                            onChange={(e) =>
-                              setEditConfig((prev) => ({ ...prev, [key]: e.target.value }))
-                            }
-                          />
-                        </div>
-                      ))}
-                      <div className="flex gap-2 mt-3">
-                        <button
-                          onClick={() => saveConfig(mod.module_id)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          保存
-                        </button>
-                        <button
-                          onClick={() => setEditingModule(null)}
-                          className="px-3.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                        >
-                          取消
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setEditingModule(mod.module_id);
-                        setEditConfig(mod.config);
-                      }}
-                      className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
-                    >
-                      编辑配置 &rarr;
-                    </button>
-                  )}
+                  <Link
+                    to={`/admin/modules/${mod.module_id}`}
+                    className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                  >
+                    编辑配置 <ChevronRight className="w-3.5 h-3.5" />
+                  </Link>
                 </div>
               ))}
             </div>

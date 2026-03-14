@@ -12,22 +12,25 @@ from .config import get_futu_host, get_futu_port
 logger = logging.getLogger("stock.quote")
 
 # ---------- Simple TTL cache ----------
-_cache: dict[str, tuple[float, object]] = {}
+_cache: dict[str, tuple[float, object, int]] = {}
 _cache_lock = Lock()
-_CACHE_TTL = 120  # seconds
+_CACHE_TTL = 120  # seconds (default)
+
+# ---------- yfinance 请求串行化 ----------
+_yf_lock = Lock()
 
 
 def _cache_get(key: str):
     with _cache_lock:
         entry = _cache.get(key)
-        if entry and (time.time() - entry[0]) < _CACHE_TTL:
+        if entry and (time.time() - entry[0]) < entry[2]:
             return entry[1]
     return None
 
 
-def _cache_set(key: str, value: object):
+def _cache_set(key: str, value: object, ttl: int = _CACHE_TTL):
     with _cache_lock:
-        _cache[key] = (time.time(), value)
+        _cache[key] = (time.time(), value, ttl)
 
 
 def _safe_float(val, default=0):
@@ -96,19 +99,24 @@ def fetch_history_yfinance(code, market="US", period="1mo", interval="1d"):
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
+    is_intraday = any(u in interval for u in ("m", "h"))
     try:
         ticker = to_yf_ticker(code, market)
         stock = yf.Ticker(ticker)
         hist = stock.history(period=period, interval=interval)
         if not hist.empty:
-            dates = [d.strftime("%Y-%m-%d") for d in hist.index]
+            if is_intraday:
+                dates = [d.strftime("%Y-%m-%d %H:%M") for d in hist.index]
+            else:
+                dates = [d.strftime("%Y-%m-%d") for d in hist.index]
             result = {
                 "dates": dates,
                 "close": hist["Close"].tolist(),
                 "high": hist["High"].tolist(),
                 "low": hist["Low"].tolist(),
             }
-            _cache_set(cache_key, result)
+            ttl = 30 if is_intraday else _CACHE_TTL
+            _cache_set(cache_key, result, ttl=ttl)
             return result
     except Exception as e:
         logger.error(f"yfinance 获取历史数据失败 [{code}]: {e}")
@@ -208,6 +216,21 @@ def _parse_option_df(df):
     return records
 
 
+def _yf_retry(fn, max_retries=3):
+    """Execute a yfinance callable with retry on rate limiting."""
+    for attempt in range(max_retries):
+        try:
+            with _yf_lock:
+                return fn()
+        except Exception as e:
+            if "Too Many Requests" in str(e) and attempt < max_retries - 1:
+                wait = 2 ** attempt
+                logger.warning(f"yfinance rate limited, retry in {wait}s...")
+                time.sleep(wait)
+                continue
+            raise
+
+
 def fetch_option_expiry_dates(code, market="US"):
     cache_key = f"opt_expiry:{code}:{market}"
     cached = _cache_get(cache_key)
@@ -215,8 +238,12 @@ def fetch_option_expiry_dates(code, market="US"):
         return cached
     try:
         ticker = to_yf_ticker(code, market)
-        stock = yf.Ticker(ticker)
-        result = list(stock.options)
+
+        def _fetch():
+            stock = yf.Ticker(ticker)
+            return list(stock.options)
+
+        result = _yf_retry(_fetch)
         if result:
             _cache_set(cache_key, result)
         return result
@@ -232,8 +259,19 @@ def fetch_option_chain(code, market="US", expiry_date=None):
         return cached
     try:
         ticker = to_yf_ticker(code, market)
-        stock = yf.Ticker(ticker)
-        available_dates = stock.options
+
+        # 优先从缓存获取到期日列表，避免重复请求
+        expiry_cache_key = f"opt_expiry:{code}:{market}"
+        available_dates = _cache_get(expiry_cache_key)
+
+        if available_dates is None:
+            def _fetch_dates():
+                s = yf.Ticker(ticker)
+                return list(s.options)
+            available_dates = _yf_retry(_fetch_dates)
+            if available_dates:
+                _cache_set(expiry_cache_key, available_dates)
+
         if not available_dates:
             return None
         if expiry_date is None:
@@ -241,8 +279,19 @@ def fetch_option_chain(code, market="US", expiry_date=None):
         elif expiry_date not in available_dates:
             return None
 
-        chain = stock.option_chain(expiry_date)
-        info = stock.info
+        # 更新 cache_key（expiry_date 现在确定了）
+        cache_key = f"opt_chain:{code}:{market}:{expiry_date}"
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+        def _fetch_chain():
+            stock = yf.Ticker(ticker)
+            chain = stock.option_chain(expiry_date)
+            info = stock.info
+            return chain, info
+
+        chain, info = _yf_retry(_fetch_chain)
         underlying_price = _safe_float(
             info.get("regularMarketPrice") or info.get("currentPrice")
         )

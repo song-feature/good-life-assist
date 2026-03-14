@@ -12,6 +12,9 @@ export interface Position {
   pl_ratio: number;
   today_pl_val: number;
   session?: string;
+  prev_close?: number;
+  price_change?: number;
+  price_change_pct?: number;
   ma5?: number | null;
   ma20?: number | null;
   rsi14?: number | null;
@@ -56,12 +59,43 @@ export interface AnalysisReport {
   recommendations?: string;
 }
 
+/* --- Options Wall types --- */
+
+export interface WallEntry {
+  strike: number;
+  openInterest: number;
+  volume: number;
+}
+
+export interface WallAnalysis {
+  expiry_date: string;
+  underlying_price: number;
+  call_walls: WallEntry[];
+  put_walls: WallEntry[];
+  max_pain: number | null;
+  total_calls_oi: number;
+  total_puts_oi: number;
+  put_call_ratio: number;
+}
+
+export interface OptionsWallData {
+  ticker: string;
+  current_price: number | null;
+  this_friday: WallAnalysis | null;
+  next_friday: WallAnalysis | null;
+}
+
+/* --- Store --- */
+
 interface StockState {
   portfolio: { positions: Position[]; funds: Funds | null; today_pl_total: number } | null;
   trends: Record<string, TrendData>;
   optionsChain: OptionsData | null;
   optionsChains: Record<string, OptionsData>;
   analysis: AnalysisReport | null;
+  optionsWalls: Record<string, OptionsWallData>;
+  optionsWallSummaries: Record<string, string>;
+  analysisRecommendations: string | null;
   loading: Record<string, boolean>;
 
   setPortfolio: (data: { positions: Position[]; funds: Funds | null; today_pl_total: number }) => void;
@@ -74,6 +108,9 @@ interface StockState {
   fetchOptionsChain: (ticker: string, expiry?: string) => Promise<void>;
   fetchOptionsForTicker: (ticker: string, expiry?: string) => Promise<void>;
   fetchAnalysis: () => Promise<void>;
+  fetchOptionsWall: (ticker: string) => Promise<void>;
+  fetchOptionsWallSummary: (ticker: string) => Promise<void>;
+  fetchAnalysisRecommendations: () => Promise<void>;
 }
 
 export const useStockStore = create<StockState>((set) => ({
@@ -82,6 +119,9 @@ export const useStockStore = create<StockState>((set) => ({
   optionsChain: null,
   optionsChains: {},
   analysis: null,
+  optionsWalls: {},
+  optionsWallSummaries: {},
+  analysisRecommendations: null,
   loading: {},
 
   setPortfolio: (data) => set({ portfolio: data }),
@@ -91,7 +131,6 @@ export const useStockStore = create<StockState>((set) => ({
 
   fetchPortfolio: async () => {
     const prev = useStockStore.getState().portfolio;
-    // Only show loading spinner when there's no existing data
     if (!prev) {
       set((s) => ({ loading: { ...s.loading, portfolio: true } }));
     }
@@ -99,11 +138,9 @@ export const useStockStore = create<StockState>((set) => ({
       const data = await fetchJSON<{ positions: Position[]; funds: Funds | null; today_pl_total: number }>(
         '/modules/stock/portfolio',
       );
-      // Only update if we got valid data; never overwrite good data with empty
       if (data && data.positions && data.positions.length > 0) {
         set({ portfolio: data });
       } else if (!prev) {
-        // First load: store whatever came back
         set({ portfolio: data });
       }
     } finally {
@@ -112,12 +149,13 @@ export const useStockStore = create<StockState>((set) => ({
   },
 
   fetchTrend: async (ticker, period = '1mo') => {
-    set((s) => ({ loading: { ...s.loading, [`trend_${ticker}`]: true } }));
+    const key = `${ticker}:${period}`;
+    set((s) => ({ loading: { ...s.loading, [`trend_${key}`]: true } }));
     try {
       const data = await fetchJSON<TrendData>(`/modules/stock/trend/${ticker}?period=${period}`);
-      set((s) => ({ trends: { ...s.trends, [ticker]: data } }));
+      set((s) => ({ trends: { ...s.trends, [key]: data } }));
     } finally {
-      set((s) => ({ loading: { ...s.loading, [`trend_${ticker}`]: false } }));
+      set((s) => ({ loading: { ...s.loading, [`trend_${key}`]: false } }));
     }
   },
 
@@ -156,6 +194,44 @@ export const useStockStore = create<StockState>((set) => ({
       set({ analysis: data });
     } finally {
       set((s) => ({ loading: { ...s.loading, analysis: false } }));
+    }
+  },
+
+  fetchOptionsWall: async (ticker) => {
+    set((s) => ({ loading: { ...s.loading, [`wall_${ticker}`]: true } }));
+    try {
+      const data = await fetchJSON<OptionsWallData>(`/modules/stock/options/${ticker}/wall`);
+      if (data && data.ticker) {
+        set((s) => ({ optionsWalls: { ...s.optionsWalls, [ticker]: data } }));
+      }
+    } finally {
+      set((s) => ({ loading: { ...s.loading, [`wall_${ticker}`]: false } }));
+    }
+  },
+
+  fetchOptionsWallSummary: async (ticker) => {
+    set((s) => ({ loading: { ...s.loading, [`wall_summary_${ticker}`]: true } }));
+    try {
+      const data = await fetchJSON<{ ticker: string; summary: string }>(
+        `/modules/stock/options/${ticker}/wall-summary`,
+      );
+      if (data && data.summary) {
+        set((s) => ({ optionsWallSummaries: { ...s.optionsWallSummaries, [ticker]: data.summary } }));
+      }
+    } finally {
+      set((s) => ({ loading: { ...s.loading, [`wall_summary_${ticker}`]: false } }));
+    }
+  },
+
+  fetchAnalysisRecommendations: async () => {
+    set((s) => ({ loading: { ...s.loading, analysis_recommendations: true } }));
+    try {
+      const data = await fetchJSON<{ recommendations: string }>('/modules/stock/analysis/recommendations');
+      if (data && data.recommendations) {
+        set({ analysisRecommendations: data.recommendations });
+      }
+    } finally {
+      set((s) => ({ loading: { ...s.loading, analysis_recommendations: false } }));
     }
   },
 }));

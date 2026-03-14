@@ -39,6 +39,13 @@ class ModuleRegistry:
                 "config": dict(module.default_config),
             }
             self._save_config()
+        else:
+            # 合并新增的 default_config 字段到已保存的配置中
+            saved = self._config[module.module_id].get("config", {})
+            merged = {**module.default_config, **saved}
+            if merged != saved:
+                self._config[module.module_id]["config"] = merged
+                self._save_config()
         logger.info(f"模块已注册: {module.module_id} ({module.display_name})")
 
     def discover_modules(self):
@@ -74,7 +81,11 @@ class ModuleRegistry:
                 module.on_disable()
 
     def get_module_config(self, module_id: str) -> dict:
-        return self._config.get(module_id, {}).get("config", {})
+        saved = self._config.get(module_id, {}).get("config", {})
+        module = self.modules.get(module_id)
+        if module and hasattr(module, "default_config"):
+            return {**module.default_config, **saved}
+        return saved
 
     def update_module_config(self, module_id: str, config: dict):
         if module_id not in self._config:
@@ -86,12 +97,14 @@ class ModuleRegistry:
         result = []
         for mid, module in self.modules.items():
             cfg = self._config.get(mid, {})
+            saved_config = cfg.get("config", {})
+            merged_config = {**module.default_config, **saved_config} if module.default_config else saved_config
             result.append({
                 "module_id": mid,
                 "display_name": module.display_name,
                 "description": module.description,
                 "enabled": cfg.get("enabled", True),
-                "config": cfg.get("config", {}),
+                "config": merged_config,
             })
         return result
 

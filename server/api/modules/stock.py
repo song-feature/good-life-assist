@@ -25,6 +25,18 @@ async def get_trend(ticker: str, period: str = Query(default="1mo"), market: str
     return await _run_sync(service.get_stock_trend_data, ticker, market=market, period=period)
 
 
+# --- 固定路径必须在参数路径之前 ---
+
+@router.get("/options/{ticker}/wall")
+async def get_options_wall(ticker: str, market: str = Query(default=None)):
+    return await _run_sync(service.get_options_wall, ticker, market=market)
+
+
+@router.get("/options/{ticker}/wall-summary")
+async def get_options_wall_summary(ticker: str, market: str = Query(default=None)):
+    return await _run_sync(service.get_options_wall_summary, ticker, market=market)
+
+
 @router.get("/options/{ticker}/expiry-dates")
 async def get_expiry_dates(ticker: str, market: str = Query(default=None)):
     dates = await _run_sync(service.get_options_expiry_dates, ticker, market=market)
@@ -37,6 +49,11 @@ async def get_options(ticker: str, expiry: str = Query(default=None), market: st
     if data is None:
         return {"error": f"未找到 {ticker} 的期权数据"}
     return data
+
+
+@router.get("/analysis/recommendations")
+async def get_analysis_recommendations(market: str = Query(default=None), env: str = Query(default=None)):
+    return await _run_sync(service.get_analysis_recommendations, market=market, env=env)
 
 
 @router.get("/analysis")

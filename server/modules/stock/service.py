@@ -6,6 +6,8 @@ from datetime import datetime
 from .account import get_positions_and_funds
 from .quote import fetch_quotes_batch, fetch_history_yfinance, fetch_option_chain, fetch_option_expiry_dates
 from .analysis import analyze_ticker, calc_rsi, calc_ma, calc_ma_series
+from .options_wall import get_options_wall_for_ticker
+from .llm_summary import generate_options_wall_summary, generate_portfolio_recommendations
 from .config import get_default_market, get_default_env
 from .utils import safe_float
 
@@ -30,6 +32,22 @@ def get_portfolio_data(market=None, env=None):
         if quote.get("current_price"):
             pos["current_price"] = safe_float(quote["current_price"])
             pos["session"] = quote.get("session", "unknown")
+            pos["prev_close"] = safe_float(quote.get("prev_close"))
+            pos["price_change"] = safe_float(quote.get("regular_change"))
+            pos["price_change_pct"] = safe_float(quote.get("regular_change_pct"))
+
+            # 盘前/盘后使用对应的变动数据
+            session = quote.get("session", "")
+            if session == "盘前" and quote.get("pre_change") is not None:
+                pos["price_change"] = safe_float(quote["pre_change"])
+                pos["price_change_pct"] = safe_float(quote["pre_change_pct"])
+            elif session == "盘后" and quote.get("post_change") is not None:
+                pos["price_change"] = safe_float(quote["post_change"])
+                pos["price_change_pct"] = safe_float(quote["post_change_pct"])
+        elif "current_price" not in pos:
+            qty = pos.get("qty", 0)
+            mval = pos.get("market_val", 0)
+            pos["current_price"] = round(mval / qty, 2) if qty > 0 else pos.get("cost_price", 0)
 
     return {
         "positions": positions,
@@ -38,10 +56,22 @@ def get_portfolio_data(market=None, env=None):
     }
 
 
+PERIOD_INTERVAL_MAP = {
+    "1d": "5m",
+    "5d": "15m",
+    "1mo": "1d",
+    "3mo": "1d",
+    "6mo": "1d",
+    "1y": "1wk",
+    "ytd": "1d",
+}
+
+
 def get_stock_trend_data(ticker, market=None, period="1mo"):
     """获取单只股票走势+技术指标"""
     market = market or get_default_market()
-    analysis = analyze_ticker(ticker, market=market)
+    interval = PERIOD_INTERVAL_MAP.get(period, "1d")
+    analysis = analyze_ticker(ticker, market=market, period=period, interval=interval)
     return {
         "ticker": ticker,
         "closes": analysis.get("closes", []),
@@ -118,4 +148,30 @@ def get_full_analysis(market=None, env=None):
         "funds": pf.get("funds"),
         "today_pl_total": pf.get("today_pl_total", 0),
         "holdings": holdings,
+    }
+
+
+def get_options_wall(ticker, market=None):
+    """返回期权墙结构化数据（快速）"""
+    market = market or get_default_market()
+    return get_options_wall_for_ticker(ticker, market=market)
+
+
+def get_options_wall_summary(ticker, market=None):
+    """返回期权墙结构化数据 + LLM 摘要"""
+    market = market or get_default_market()
+    wall_data = get_options_wall_for_ticker(ticker, market=market)
+    summary = generate_options_wall_summary(wall_data)
+    return {"ticker": ticker, "wall_data": wall_data, "summary": summary}
+
+
+def get_analysis_recommendations(market=None, env=None):
+    """返回 LLM 组合投资建议"""
+    analysis_data = get_full_analysis(market=market, env=env)
+    if "error" in analysis_data:
+        return analysis_data
+    recommendations = generate_portfolio_recommendations(analysis_data)
+    return {
+        "recommendations": recommendations,
+        "generated_at": datetime.now().isoformat(),
     }

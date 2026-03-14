@@ -2,6 +2,25 @@
 from server.modules.base import BaseModule
 from langchain_core.tools import BaseTool
 
+OPTIONS_WALL_PROMPT_DEFAULT = """你是一位专业的美股期权分析师。请根据以下期权持仓量数据分析关键支撑位和阻力位。
+
+{data}
+
+请用中文简洁回答（150字以内，不使用 markdown）：
+1) 短期关键支撑和阻力在哪里
+2) Max Pain 暗示的收盘磁吸方向
+3) 做市商对冲可能如何影响股价"""
+
+RECOMMENDATIONS_PROMPT_DEFAULT = """你是一位专业的股票投资顾问。请根据以下持仓技术分析和期权数据给出操作建议。
+
+{data}
+
+要求：
+- 每只股票一条建议（一句话）
+- 最后给整体组合判断
+- 总字数300字以内，使用 markdown **加粗** 强调
+- 末尾加风险提示"""
+
 
 class StockModule(BaseModule):
     module_id = "stock"
@@ -12,6 +31,8 @@ class StockModule(BaseModule):
         "futu_port": 11111,
         "market": "US",
         "env": "SIMULATE",
+        "prompt_options_wall": OPTIONS_WALL_PROMPT_DEFAULT,
+        "prompt_recommendations": RECOMMENDATIONS_PROMPT_DEFAULT,
     }
 
     def get_tools(self) -> list[BaseTool]:
