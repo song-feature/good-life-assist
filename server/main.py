@@ -18,6 +18,12 @@ install_log_handler(min_level=logging.WARNING)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 初始化数据库
+    from server.db.session import init_db
+    from server.db.migration import run_migration
+    init_db()
+    run_migration()
+
     registry = get_registry()
     registry.discover_modules()
     logger.info(f"已注册 {len(registry.modules)} 个模块: {list(registry.modules.keys())}")

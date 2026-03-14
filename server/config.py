@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     default_trd_env: str = "SIMULATE"
     default_trd_market: str = "US"
 
+    # Database
+    db_path: str = "data/app.db"
+    encryption_key: str = ""
+
     # Paths
     modules_config_path: str = "data/modules_config.json"
 

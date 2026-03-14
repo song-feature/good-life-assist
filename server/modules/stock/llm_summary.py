@@ -5,7 +5,7 @@ from typing import Any
 
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from server.core.llm import create_llm
+from server.core.llm import create_llm_for_scope
 from server.modules.registry import get_registry
 
 logger = logging.getLogger("stock.llm_summary")
@@ -164,7 +164,7 @@ def generate_portfolio_recommendations(analysis_data: dict) -> str:
     prompt_filled = prompt_template.replace("{data}", data_text)
 
     try:
-        llm = create_llm(temperature=0.4)
+        llm = create_llm_for_scope("module.stock.recommendations", temperature=0.4)
         resp = llm.invoke([
             SystemMessage(content="你是一位专业的股票投资顾问。"),
             HumanMessage(content=prompt_filled),

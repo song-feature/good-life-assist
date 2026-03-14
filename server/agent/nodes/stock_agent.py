@@ -3,9 +3,10 @@ import json
 import logging
 from langchain_core.messages import AIMessage, SystemMessage
 
-from server.core.llm import create_llm
+from server.core.llm import create_llm_for_scope
 from server.modules.registry import get_registry
 from server.agent.state import AgentState
+from server.agent.progress import emit_progress
 
 logger = logging.getLogger("server.agent.nodes.stock")
 
@@ -22,7 +23,7 @@ def stock_agent_node(state: AgentState) -> dict:
 
     tools = module.get_tools()
     system_prompt = module.get_system_prompt()
-    llm = create_llm(temperature=0.3)
+    llm = create_llm_for_scope("module.stock.agent", temperature=0.3)
     llm_with_tools = llm.bind_tools(tools)
 
     messages = state.get("messages", [])
@@ -45,6 +46,7 @@ def stock_agent_node(state: AgentState) -> dict:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
             logger.info(f"调用工具: {tool_name}({tool_args})")
+            emit_progress("tool_call", f"正在调用 {tool_name}...")
 
             tool_fn = next((t for t in tools if t.name == tool_name), None)
             if tool_fn is None:
@@ -72,6 +74,7 @@ def stock_agent_node(state: AgentState) -> dict:
     final_response = full_messages[-1]
     if not isinstance(final_response, AIMessage):
         # If the last message is a ToolMessage, invoke LLM once more for summary
+        emit_progress("generating", "正在生成分析报告...")
         final_response = llm.invoke(full_messages)
 
     return {

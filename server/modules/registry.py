@@ -9,43 +9,70 @@ from server.modules.base import BaseModule
 logger = logging.getLogger("server.registry")
 
 
+def _get_config_service():
+    """延迟导入避免循环依赖"""
+    from server.db.service import get_module_config_service
+    return get_module_config_service()
+
+
 class ModuleRegistry:
     def __init__(self):
         self.modules: dict[str, BaseModule] = {}
         self._config: dict[str, dict] = {}
-        self._load_config()
+        self._db_ready = False
 
-    def _config_path(self) -> Path:
+    def _ensure_db(self):
+        """尝试从数据库加载配置，失败时回退到 JSON"""
+        if self._db_ready:
+            return
+        try:
+            svc = _get_config_service()
+            all_configs = svc.get_all()
+            for item in all_configs:
+                self._config[item["module_id"]] = {
+                    "enabled": item.get("enabled", True),
+                    "config": item.get("config", {}),
+                }
+            self._db_ready = True
+        except Exception:
+            # 数据库尚未初始化，回退 JSON
+            self._load_config_from_json()
+
+    def _load_config_from_json(self):
         settings = get_settings()
-        return Path(settings.modules_config_path)
-
-    def _load_config(self):
-        path = self._config_path()
+        path = Path(settings.modules_config_path)
         if path.exists():
             self._config = json.loads(path.read_text(encoding="utf-8"))
-        else:
-            self._config = {}
 
-    def _save_config(self):
-        path = self._config_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(self._config, ensure_ascii=False, indent=2), encoding="utf-8")
+    def _save_to_db(self, module_id: str):
+        """持久化单个模块配置到数据库"""
+        try:
+            svc = _get_config_service()
+            cfg = self._config.get(module_id, {})
+            svc.upsert(
+                module_id,
+                enabled=cfg.get("enabled", True),
+                config=cfg.get("config", {}),
+            )
+        except Exception as e:
+            logger.warning(f"保存模块配置到数据库失败 ({module_id}): {e}")
 
     def register(self, module: BaseModule):
         self.modules[module.module_id] = module
+        self._ensure_db()
         if module.module_id not in self._config:
             self._config[module.module_id] = {
                 "enabled": True,
                 "config": dict(module.default_config),
             }
-            self._save_config()
+            self._save_to_db(module.module_id)
         else:
             # 合并新增的 default_config 字段到已保存的配置中
             saved = self._config[module.module_id].get("config", {})
             merged = {**module.default_config, **saved}
             if merged != saved:
                 self._config[module.module_id]["config"] = merged
-                self._save_config()
+                self._save_to_db(module.module_id)
         logger.info(f"模块已注册: {module.module_id} ({module.display_name})")
 
     def discover_modules(self):
@@ -53,6 +80,7 @@ class ModuleRegistry:
         self.register(StockModule())
 
     def get_enabled_modules(self) -> list[BaseModule]:
+        self._ensure_db()
         return [
             m for mid, m in self.modules.items()
             if self._config.get(mid, {}).get("enabled", True)
@@ -62,25 +90,29 @@ class ModuleRegistry:
         return self.modules.get(module_id)
 
     def is_enabled(self, module_id: str) -> bool:
+        self._ensure_db()
         return self._config.get(module_id, {}).get("enabled", True)
 
     def enable_module(self, module_id: str):
+        self._ensure_db()
         if module_id in self._config:
             self._config[module_id]["enabled"] = True
-            self._save_config()
+            self._save_to_db(module_id)
             module = self.modules.get(module_id)
             if module:
                 module.on_enable()
 
     def disable_module(self, module_id: str):
+        self._ensure_db()
         if module_id in self._config:
             self._config[module_id]["enabled"] = False
-            self._save_config()
+            self._save_to_db(module_id)
             module = self.modules.get(module_id)
             if module:
                 module.on_disable()
 
     def get_module_config(self, module_id: str) -> dict:
+        self._ensure_db()
         saved = self._config.get(module_id, {}).get("config", {})
         module = self.modules.get(module_id)
         if module and hasattr(module, "default_config"):
@@ -88,12 +120,14 @@ class ModuleRegistry:
         return saved
 
     def update_module_config(self, module_id: str, config: dict):
+        self._ensure_db()
         if module_id not in self._config:
             self._config[module_id] = {"enabled": True, "config": {}}
         self._config[module_id]["config"] = config
-        self._save_config()
+        self._save_to_db(module_id)
 
     def get_all_module_info(self) -> list[dict]:
+        self._ensure_db()
         result = []
         for mid, module in self.modules.items():
             cfg = self._config.get(mid, {})

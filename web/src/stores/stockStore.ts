@@ -6,11 +6,13 @@ export interface Position {
   name: string;
   qty: number;
   cost_price: number;
+  avg_cost_price?: number;
   current_price: number;
   market_val: number;
   pl_val: number;
   pl_ratio: number;
   today_pl_val: number;
+  unrealized_pl?: number;
   session?: string;
   prev_close?: number;
   price_change?: number;

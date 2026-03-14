@@ -52,6 +52,9 @@ export async function fetchSSE(
             case 'ui_command':
               handlers.onUICommand?.(data);
               break;
+            case 'progress':
+              handlers.onProgress?.(data);
+              break;
             case 'tool_call':
               handlers.onToolCall?.(data);
               break;

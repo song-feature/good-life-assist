@@ -2,9 +2,10 @@
 import logging
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from server.core.llm import create_llm
+from server.core.llm import create_llm_for_scope
 from server.modules.registry import get_registry
 from server.agent.state import AgentState
+from server.agent.progress import emit_progress
 
 logger = logging.getLogger("server.agent.router")
 
@@ -39,7 +40,7 @@ def router_node(state: AgentState) -> dict:
 
     last_msg = messages[-1].content if messages else ""
 
-    llm = create_llm(temperature=0)
+    llm = create_llm_for_scope("agent.router", temperature=0)
     prompt = ROUTER_PROMPT.format(modules_desc=modules_desc, current_module=current)
 
     response = llm.invoke([
@@ -51,6 +52,10 @@ def router_node(state: AgentState) -> dict:
     valid_ids = {m.module_id for m in enabled} | {"general"}
     if intent not in valid_ids:
         intent = "general"
+
+    module_names = {m.module_id: m.display_name for m in enabled}
+    display = module_names.get(intent, "通用对话")
+    emit_progress("routed", f"路由到{display}模块")
 
     logger.info(f"路由意图: '{last_msg[:30]}...' -> {intent}")
     return {"intent": intent}

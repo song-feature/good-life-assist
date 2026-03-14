@@ -1,7 +1,9 @@
-"""聊天 SSE 端点"""
+"""聊天 SSE 端点 - 支持实时进度推送"""
 import json
 import logging
 import asyncio
+import contextvars
+import queue
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -9,6 +11,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 from server.core.schemas import ChatRequest
 from server.agent.graph import get_graph
+from server.agent.progress import progress_queue
 
 logger = logging.getLogger("server.api.chat")
 router = APIRouter(tags=["chat"])
@@ -30,9 +33,36 @@ async def chat_stream(request: ChatRequest):
             "intent": None,
         }
 
+        # 创建 progress queue 并注入到 contextvars
+        q: queue.Queue = queue.Queue()
+        ctx = contextvars.copy_context()
+        ctx.run(progress_queue.set, q)
+
         try:
-            # Run graph in thread pool to not block
-            result = await asyncio.to_thread(graph.invoke, input_state)
+            loop = asyncio.get_event_loop()
+            # 在线程中执行 graph.invoke，同时携带 contextvars 上下文
+            future = loop.run_in_executor(
+                None,
+                lambda: ctx.run(graph.invoke, input_state),
+            )
+
+            # 边消费进度事件边等待结果
+            while not future.done():
+                try:
+                    event = await asyncio.to_thread(q.get, timeout=0.1)
+                    yield _format_sse("progress", event)
+                except queue.Empty:
+                    continue
+
+            result = future.result()
+
+            # 排空 queue 中可能残留的事件
+            while not q.empty():
+                try:
+                    event = q.get_nowait()
+                    yield _format_sse("progress", event)
+                except queue.Empty:
+                    break
 
             # Send ui_commands first
             for cmd in result.get("ui_commands", []):

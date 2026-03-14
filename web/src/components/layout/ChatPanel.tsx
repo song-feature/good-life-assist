@@ -7,7 +7,7 @@ import { ChatInput } from '../chat/ChatInput';
 import { Bot, Settings } from 'lucide-react';
 
 export function ChatPanel() {
-  const { messages, isStreaming, sendMessage } = useChatStore();
+  const { messages, isStreaming, sendMessage, progressMessage } = useChatStore();
   const handleUICommand = useModuleStore((s) => s.handleUICommand);
   const { setPortfolio, setTrend, setOptionsChain, setAnalysis } = useStockStore();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -71,7 +71,7 @@ export function ChatPanel() {
             <p className="text-xs mt-1.5 text-gray-400">试试说"帮我看看我的持仓"</p>
           </div>
         )}
-        <MessageList messages={messages} isStreaming={isStreaming} />
+        <MessageList messages={messages} isStreaming={isStreaming} progressMessage={progressMessage} />
         <div ref={bottomRef} />
       </div>
       <ChatInput onSend={handleSend} disabled={isStreaming} />

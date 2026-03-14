@@ -11,6 +11,7 @@ export interface ChatMessage {
 interface ChatState {
   messages: ChatMessage[];
   isStreaming: boolean;
+  progressMessage: string;
   sendMessage: (
     content: string,
     onUICommand?: (cmd: { module: string; action: string; data: Record<string, unknown> }) => void,
@@ -24,6 +25,7 @@ const nextId = () => `msg-${++messageCounter}-${Date.now()}`;
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isStreaming: false,
+  progressMessage: '',
 
   sendMessage: async (content, onUICommand) => {
     const userMsg: ChatMessage = {
@@ -44,6 +46,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       messages: [...s.messages, userMsg, assistantMsg],
       isStreaming: true,
+      progressMessage: '',
     }));
 
     try {
@@ -63,6 +66,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           onUICommand: (cmd) => {
             onUICommand?.(cmd);
           },
+          onProgress: (data) => {
+            set({ progressMessage: data.detail });
+          },
           onError: (data) => {
             set((s) => ({
               messages: s.messages.map((m) =>
@@ -73,13 +79,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }));
           },
           onDone: () => {
-            set({ isStreaming: false });
+            set({ isStreaming: false, progressMessage: '' });
           },
         },
       );
     } catch (e) {
       set((s) => ({
         isStreaming: false,
+        progressMessage: '',
         messages: s.messages.map((m) =>
           m.id === assistantId
             ? { ...m, content: `连接失败: ${e}` }
@@ -89,5 +96,5 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  clearMessages: () => set({ messages: [] }),
+  clearMessages: () => set({ messages: [], progressMessage: '' }),
 }));

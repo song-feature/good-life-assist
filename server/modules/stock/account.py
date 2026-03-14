@@ -56,10 +56,12 @@ def get_positions(market=None, env=None, include_zero=False):
                     "qty": qty,
                     "can_sell_qty": safe_int(row.get("can_sell_qty")),
                     "cost_price": safe_float(row.get("cost_price")),
+                    "avg_cost_price": safe_float(row.get("average_cost")),
                     "market_val": safe_float(row.get("market_val")),
                     "pl_val": safe_float(row.get("pl_val")),
                     "pl_ratio": safe_float(row.get("pl_ratio")),
                     "today_pl_val": today_pl,
+                    "unrealized_pl": safe_float(row.get("unrealized_pl")),
                 })
 
         return {

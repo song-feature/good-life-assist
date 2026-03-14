@@ -18,6 +18,101 @@ body {
   font-family: "SF Mono", "Menlo", "Consolas", "Liberation Mono", monospace;
 }
 
+/* Markdown rendering in chat bubbles */
+.markdown-body {
+  line-height: 1.7;
+  word-break: break-word;
+}
+.markdown-body > *:first-child { margin-top: 0; }
+.markdown-body > *:last-child { margin-bottom: 0; }
+
+.markdown-body p { margin: 0.4em 0; }
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3,
+.markdown-body h4, .markdown-body h5, .markdown-body h6 {
+  font-weight: 600;
+  margin: 0.8em 0 0.4em;
+  line-height: 1.4;
+}
+.markdown-body h1 { font-size: 1.15em; }
+.markdown-body h2 { font-size: 1.08em; }
+.markdown-body h3 { font-size: 1.02em; }
+
+.markdown-body ul, .markdown-body ol {
+  margin: 0.4em 0;
+  padding-left: 1.5em;
+}
+.markdown-body ul { list-style-type: disc; }
+.markdown-body ol { list-style-type: decimal; }
+.markdown-body li { margin: 0.15em 0; }
+.markdown-body li > ul, .markdown-body li > ol { margin: 0.1em 0; }
+
+.markdown-body code {
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 0.88em;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+}
+.markdown-body pre {
+  margin: 0.5em 0;
+  border-radius: 8px;
+  overflow-x: auto;
+  background: #1e293b;
+}
+.markdown-body pre code {
+  display: block;
+  padding: 0.75em 1em;
+  background: none;
+  border: none;
+  color: #e2e8f0;
+  font-size: 0.85em;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.markdown-body blockquote {
+  margin: 0.5em 0;
+  padding: 0.25em 0.75em;
+  border-left: 3px solid #3b82f6;
+  background: #eff6ff;
+  color: #475569;
+  border-radius: 0 6px 6px 0;
+}
+.markdown-body blockquote p { margin: 0.2em 0; }
+
+.markdown-body table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  width: 100%;
+  font-size: 0.92em;
+}
+.markdown-body th, .markdown-body td {
+  border: 1px solid #e5e7eb;
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+.markdown-body th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 0.6em 0;
+}
+
+.markdown-body a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown-body a:hover { color: #1d4ed8; }
+
+.markdown-body strong { font-weight: 600; }
+
 /* Smooth data transitions for auto-refresh */
 td, .data-val {
   transition: color 0.2s ease;

@@ -153,37 +153,39 @@ export function AdminPage() {
         {/* ============ Settings Tab ============ */}
         {tab === 'settings' && (
           <>
-            {/* LLM Config */}
+            {/* LLM Config - Link to Model Management */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
-              <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
-                  <Brain className="w-4.5 h-4.5 text-purple-600" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+                    <Brain className="w-4.5 h-4.5 text-purple-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-gray-800">LLM 模型管理</h2>
+                    <p className="text-xs text-gray-400 mt-0.5">配置多个模型，按功能分配</p>
+                  </div>
                 </div>
-                <h2 className="text-sm font-semibold text-gray-800">LLM 配置</h2>
+                <Link
+                  to="/admin/models"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
+                >
+                  管理模型 <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
               </div>
               {llmConfig && (
-                <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs text-gray-400 uppercase tracking-wide">Provider</span>
-                    <span className="font-medium text-gray-800">{llmConfig.provider}</span>
+                <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-3 gap-3 text-xs text-gray-500">
+                  <div>
+                    <span className="text-gray-400">当前模型: </span>
+                    <span className="font-medium text-gray-700">{llmConfig.provider}/{llmConfig.model}</span>
                   </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs text-gray-400 uppercase tracking-wide">Model</span>
-                    <span className="font-medium text-gray-800">{llmConfig.model}</span>
+                  <div>
+                    <span className="text-gray-400">来源: </span>
+                    <span className="font-medium text-gray-700">{(llmConfig as Record<string, unknown>).source as string || 'env'}</span>
                   </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs text-gray-400 uppercase tracking-wide">Base URL</span>
-                    <span className="font-medium text-gray-700 text-xs break-all">{llmConfig.base_url}</span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs text-gray-400 uppercase tracking-wide">API Key</span>
-                    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full w-fit ${
-                      llmConfig.has_api_key
-                        ? 'bg-green-50 text-green-700'
-                        : 'bg-red-50 text-red-600'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${llmConfig.has_api_key ? 'bg-green-500' : 'bg-red-400'}`} />
-                      {llmConfig.has_api_key ? '已配置' : '未配置'}
+                  <div>
+                    <span className={`inline-flex items-center gap-1 font-medium ${llmConfig.has_api_key ? 'text-emerald-600' : 'text-red-500'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${llmConfig.has_api_key ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                      {llmConfig.has_api_key ? 'Key 已配置' : 'Key 未配置'}
                     </span>
                   </div>
                 </div>

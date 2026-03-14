@@ -7,14 +7,16 @@ from langgraph.graph import StateGraph, START, END
 from server.agent.state import AgentState
 from server.agent.router import router_node
 from server.agent.nodes.stock_agent import stock_agent_node
-from server.core.llm import create_llm
+from server.agent.progress import emit_progress
+from server.core.llm import create_llm_for_scope
 
 logger = logging.getLogger("server.agent.graph")
 
 
 def chat_agent_node(state: AgentState) -> dict:
     """通用聊天节点 - 直接调用 LLM"""
-    llm = create_llm()
+    emit_progress("chat_thinking", "正在思考回复...")
+    llm = create_llm_for_scope("agent.chat")
     messages = state.get("messages", [])
     response = llm.invoke(messages)
     return {

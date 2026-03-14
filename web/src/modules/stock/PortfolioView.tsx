@@ -288,11 +288,11 @@ function PositionTable({ positions }: { positions: Position[] }) {
               <th className="text-left px-4 py-3 font-semibold">代码</th>
               <th className="text-left px-4 py-3 font-semibold">名称</th>
               <th className="text-right px-4 py-3 font-semibold">数量</th>
-              <th className="text-right px-4 py-3 font-semibold">成本价</th>
+              <th className="text-right px-4 py-3 font-semibold">平均成本价</th>
               <th className="text-right px-4 py-3 font-semibold">现价</th>
               <th className="text-right px-4 py-3 font-semibold">涨跌</th>
               <th className="text-right px-4 py-3 font-semibold">今日盈亏</th>
-              <th className="text-right px-4 py-3 font-semibold">今日盈亏%</th>
+              <th className="text-right px-4 py-3 font-semibold">未实现盈亏</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -301,12 +301,15 @@ function PositionTable({ positions }: { positions: Position[] }) {
               const chgPct = pos.price_change_pct ?? 0;
               const chgColor = chg > 0 ? 'text-emerald-600' : chg < 0 ? 'text-red-600' : 'text-gray-500';
               const todayColor = pos.today_pl_val >= 0 ? 'text-emerald-600' : 'text-red-600';
+              const costPrice = pos.avg_cost_price ?? pos.cost_price;
+              const unrealizedPl = pos.unrealized_pl ?? pos.pl_val;
+              const unrealizedColor = unrealizedPl >= 0 ? 'text-emerald-600' : 'text-red-600';
               return (
                 <tr key={pos.ticker} className={`hover:bg-blue-50/30 transition-colors ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
                   <TickerCell ticker={pos.ticker} onOpen={setOpenTicker} />
                   <td className="px-4 py-3 text-gray-500">{pos.name}</td>
                   <td className="px-4 py-3 text-right font-num text-gray-700">{pos.qty}</td>
-                  <td className="px-4 py-3 text-right font-num text-gray-700">${pos.cost_price?.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right font-num text-gray-700">${costPrice?.toFixed(2)}</td>
                   <td className="px-4 py-3 text-right font-num font-semibold text-gray-900">
                     ${pos.current_price?.toFixed(2)}
                   </td>
@@ -319,8 +322,8 @@ function PositionTable({ positions }: { positions: Position[] }) {
                   <td className={`px-4 py-3 text-right font-num font-semibold ${todayColor}`}>
                     {pos.today_pl_val >= 0 ? '+' : ''}${fmt(pos.today_pl_val)}
                   </td>
-                  <td className={`px-4 py-3 text-right font-num font-semibold ${todayColor}`}>
-                    {chgPct >= 0 ? '+' : ''}{chgPct.toFixed(2)}%
+                  <td className={`px-4 py-3 text-right font-num font-semibold ${unrealizedColor}`}>
+                    {unrealizedPl >= 0 ? '+' : ''}${fmt(unrealizedPl)}
                   </td>
                 </tr>
               );
@@ -337,36 +340,6 @@ function PositionTable({ positions }: { positions: Position[] }) {
         />
       )}
     </>
-  );
-}
-
-function SignalBadge({ signal }: { signal: string }) {
-  const config: Record<string, { label: string; color: string }> = {
-    golden_cross: { label: '金叉', color: 'bg-emerald-100 text-emerald-700 ring-emerald-600/10' },
-    death_cross: { label: '死叉', color: 'bg-red-100 text-red-700 ring-red-600/10' },
-    neutral: { label: '中性', color: 'bg-gray-100 text-gray-700 ring-gray-600/10' },
-    bullish: { label: '看涨', color: 'bg-emerald-100 text-emerald-700 ring-emerald-600/10' },
-    bearish: { label: '看跌', color: 'bg-red-100 text-red-700 ring-red-600/10' },
-    no_data: { label: '无数据', color: 'bg-gray-50 text-gray-400 ring-gray-400/10' },
-    no_options: { label: '无期权', color: 'bg-gray-50 text-gray-400 ring-gray-400/10' },
-  };
-  const c = config[signal] || { label: signal, color: 'bg-gray-100 text-gray-600 ring-gray-600/10' };
-  return (
-    <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ring-1 ring-inset ${c.color}`}>
-      {c.label}
-    </span>
-  );
-}
-
-function RSIGauge({ value }: { value: number | null }) {
-  if (value == null) return <span className="text-xs text-gray-400">—</span>;
-  const color = value > 70 ? 'text-red-600' : value < 30 ? 'text-emerald-600' : 'text-gray-800';
-  const label = value > 70 ? '超买' : value < 30 ? '超卖' : '中性';
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className={`text-sm font-bold font-num ${color}`}>{value}</span>
-      <span className={`text-[10px] font-medium ${color} opacity-80`}>{label}</span>
-    </div>
   );
 }
 
@@ -396,8 +369,6 @@ function AnalysisSection() {
 
   if (!analysis) return null;
 
-  const holdings = (analysis.holdings || []) as Record<string, unknown>[];
-
   return (
     <div className="mt-8">
       <div className="flex items-center justify-between mb-4">
@@ -412,67 +383,6 @@ function AnalysisSection() {
       </div>
 
       <RecommendationsBlock />
-
-      <div className="space-y-3 mb-4">
-        {holdings.map((h) => {
-          const plVal = (h.pl_val as number) || 0;
-          const plRatio = (h.pl_ratio as number) || 0;
-          const plColor = plVal >= 0 ? 'text-emerald-600' : 'text-red-600';
-
-          return (
-            <div key={h.ticker as string} className="bg-white rounded-xl shadow-[0_1px_4px_rgba(0,0,0,0.06)] border border-gray-100/80 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-gray-900">{h.ticker as string}</span>
-                  <span className="text-xs text-gray-400">{h.name as string}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500">{h.qty as number} 股</span>
-                  <span className={`text-xs font-semibold font-num ${plColor}`}>
-                    {plVal >= 0 ? '+' : ''}${fmt(plVal)}
-                    <span className="ml-1 opacity-75">({plRatio >= 0 ? '+' : ''}{plRatio.toFixed(2)}%)</span>
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-4 gap-4">
-                <div>
-                  <span className="text-[10px] text-gray-400 uppercase tracking-wider">MA 信号</span>
-                  <div className="mt-1">
-                    <SignalBadge signal={h.ma_signal as string} />
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[10px] text-gray-400 uppercase tracking-wider">RSI(14)</span>
-                  <div className="mt-1">
-                    <RSIGauge value={h.rsi14 as number | null} />
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[10px] text-gray-400 uppercase tracking-wider">5日涨跌</span>
-                  <div className="mt-1">
-                    {h.price_change_5d_pct != null ? (
-                      <span className={`text-sm font-bold font-num ${
-                        (h.price_change_5d_pct as number) >= 0 ? 'text-emerald-600' : 'text-red-600'
-                      }`}>
-                        {(h.price_change_5d_pct as number) >= 0 ? '+' : ''}{(h.price_change_5d_pct as number).toFixed(2)}%
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-400">—</span>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[10px] text-gray-400 uppercase tracking-wider">期权情绪</span>
-                  <div className="mt-1">
-                    <SignalBadge signal={h.options_sentiment as string} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
 
       <div className="bg-amber-50/80 border border-amber-200/60 rounded-xl p-3.5 flex items-start gap-2.5">
         <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
