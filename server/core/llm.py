@@ -26,6 +26,7 @@ def _create_by_provider(
             api_key=api_key,
             base_url=base_url or None,
             temperature=temperature,
+            stream_usage=True,
         )
 
     if provider == "anthropic":
@@ -59,6 +60,14 @@ def _create_by_provider(
         base_url=base_url or None,
         temperature=temperature,
     )
+
+
+def resolve_model_info(scope: str) -> tuple[str, str]:
+    """返回 (provider, model) 用于展示"""
+    from server.db.service import get_llm_service
+    service = get_llm_service()
+    resolved = service.resolve_model_for_scope(scope)
+    return resolved.provider, resolved.model
 
 
 def create_llm_for_scope(

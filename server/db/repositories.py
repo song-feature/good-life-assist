@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from server.db.models import LLMModel, ModelAssignment, ModuleConfig
+from server.db.models import LLMModel, ModelAssignment, ModuleConfig, ChannelConfig
 from server.db.crypto import encrypt_api_key, decrypt_api_key
 
 logger = logging.getLogger("server.db.repositories")
@@ -194,4 +194,82 @@ class ModuleConfigRepository:
             "module_id": obj.module_id,
             "enabled": obj.enabled,
             "config": json.loads(obj.config_json) if obj.config_json else {},
+        }
+
+
+# ==================== Channel Config ====================
+
+class ChannelConfigRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def get(self, channel_id: str) -> ChannelConfig | None:
+        return self.session.get(ChannelConfig, channel_id)
+
+    def get_all(self) -> list[ChannelConfig]:
+        return self.session.query(ChannelConfig).order_by(ChannelConfig.channel_id).all()
+
+    def upsert(self, channel_id: str, channel_type: str, enabled: bool = False,
+               config: dict | None = None) -> ChannelConfig:
+        obj = self.get(channel_id)
+        if obj:
+            obj.enabled = enabled
+            if config is not None:
+                obj.config_json = json.dumps(config, ensure_ascii=False)
+            obj.updated_at = datetime.now(timezone.utc)
+        else:
+            obj = ChannelConfig(
+                channel_id=channel_id,
+                channel_type=channel_type,
+                enabled=enabled,
+                config_json=json.dumps(config or {}, ensure_ascii=False),
+            )
+            self.session.add(obj)
+        self.session.commit()
+        return obj
+
+    def update_enabled(self, channel_id: str, enabled: bool) -> ChannelConfig | None:
+        obj = self.get(channel_id)
+        if not obj:
+            return None
+        obj.enabled = enabled
+        obj.updated_at = datetime.now(timezone.utc)
+        self.session.commit()
+        return obj
+
+    def update_config(self, channel_id: str, config: dict) -> ChannelConfig | None:
+        obj = self.get(channel_id)
+        if not obj:
+            return None
+        obj.config_json = json.dumps(config, ensure_ascii=False)
+        obj.updated_at = datetime.now(timezone.utc)
+        self.session.commit()
+        return obj
+
+    def update_status(self, channel_id: str, status: str, message: str = "") -> ChannelConfig | None:
+        obj = self.get(channel_id)
+        if not obj:
+            return None
+        obj.status = status
+        obj.status_message = message
+        obj.updated_at = datetime.now(timezone.utc)
+        self.session.commit()
+        return obj
+
+    @staticmethod
+    def to_dict(obj: ChannelConfig, mask_secrets: bool = True) -> dict:
+        config = json.loads(obj.config_json) if obj.config_json else {}
+        if mask_secrets:
+            for key in list(config.keys()):
+                if "secret" in key.lower() or "key" in key.lower() or "password" in key.lower():
+                    if config[key]:
+                        config[key] = "••••••••"
+        return {
+            "channel_id": obj.channel_id,
+            "channel_type": obj.channel_type,
+            "enabled": obj.enabled,
+            "config": config,
+            "status": obj.status or "stopped",
+            "status_message": obj.status_message or "",
+            "updated_at": obj.updated_at.isoformat() if obj.updated_at else None,
         }

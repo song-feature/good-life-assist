@@ -7,30 +7,13 @@ from threading import Lock
 import yfinance as yf
 from futu import OpenQuoteContext, RET_OK
 
+from .cache import cache_get, cache_set, DEFAULT_TTL
 from .config import get_futu_host, get_futu_port
 
 logger = logging.getLogger("stock.quote")
 
-# ---------- Simple TTL cache ----------
-_cache: dict[str, tuple[float, object, int]] = {}
-_cache_lock = Lock()
-_CACHE_TTL = 120  # seconds (default)
-
 # ---------- yfinance 请求串行化 ----------
 _yf_lock = Lock()
-
-
-def _cache_get(key: str):
-    with _cache_lock:
-        entry = _cache.get(key)
-        if entry and (time.time() - entry[0]) < entry[2]:
-            return entry[1]
-    return None
-
-
-def _cache_set(key: str, value: object, ttl: int = _CACHE_TTL):
-    with _cache_lock:
-        _cache[key] = (time.time(), value, ttl)
 
 
 def _safe_float(val, default=0):
@@ -96,7 +79,7 @@ def fetch_price_futu(full_code, quote_ctx=None, host=None, port=None):
 
 def fetch_history_yfinance(code, market="US", period="1mo", interval="1d"):
     cache_key = f"hist:{code}:{market}:{period}:{interval}"
-    cached = _cache_get(cache_key)
+    cached = cache_get(cache_key)
     if cached is not None:
         return cached
     is_intraday = any(u in interval for u in ("m", "h"))
@@ -115,8 +98,8 @@ def fetch_history_yfinance(code, market="US", period="1mo", interval="1d"):
                 "high": hist["High"].tolist(),
                 "low": hist["Low"].tolist(),
             }
-            ttl = 30 if is_intraday else _CACHE_TTL
-            _cache_set(cache_key, result, ttl=ttl)
+            ttl = 30 if is_intraday else DEFAULT_TTL
+            cache_set(cache_key, result, ttl=ttl)
             return result
     except Exception as e:
         logger.error(f"yfinance 获取历史数据失败 [{code}]: {e}")
@@ -125,14 +108,51 @@ def fetch_history_yfinance(code, market="US", period="1mo", interval="1d"):
 
 def fetch_quotes_batch(tickers, market="US"):
     cache_key = f"quotes_batch:{','.join(sorted(tickers))}:{market}"
-    cached = _cache_get(cache_key)
+    cached = cache_get(cache_key)
     if cached is not None:
         return cached
+
+    # DB-first: 尝试从 stock_store 获取未过期报价
+    db_fresh = {}
+    remaining_tickers = list(tickers)
+    try:
+        from server.modules.stock_store.service import get_stock_store_service
+        from server.modules.stock.config import get_stock_config
+        svc = get_stock_store_service()
+        max_age = get_stock_config().get("fetch_interval_minutes", 30)
+        db_fresh, remaining_tickers = svc.get_fresh_quotes(tickers, market, max_age_minutes=max_age)
+        if db_fresh:
+            # 将 DB 格式转换为 fetch_quotes_batch 的返回格式
+            for tk, q in list(db_fresh.items()):
+                db_fresh[tk] = {
+                    "current_price": q.get("regular_price"),
+                    "session": q.get("session", ""),
+                    "regular_price": q.get("regular_price"),
+                    "regular_change": q.get("regular_change"),
+                    "regular_change_pct": q.get("regular_change_pct"),
+                    "pre_price": q.get("pre_price"),
+                    "pre_change": q.get("pre_change"),
+                    "pre_change_pct": q.get("pre_change_pct"),
+                    "post_price": q.get("post_price"),
+                    "post_change": q.get("post_change"),
+                    "post_change_pct": q.get("post_change_pct"),
+                    "prev_close": q.get("prev_close"),
+                }
+        if not remaining_tickers:
+            logger.debug(f"全部 {len(tickers)} 只股票命中 DB 缓存")
+            return db_fresh
+        logger.debug(f"DB 命中 {len(db_fresh)} 只，剩余 {len(remaining_tickers)} 只从 yfinance 获取")
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.debug(f"stock_store DB 查询失败，降级到 yfinance: {e}")
+
     quotes = {}
+    actual_tickers = remaining_tickers
     if market == "HK":
         yf_tickers = []
         ticker_map = {}
-        for t in tickers:
+        for t in actual_tickers:
             digits = t.lstrip("0") or "0"
             if len(digits) < 4:
                 digits = digits.zfill(4)
@@ -141,8 +161,8 @@ def fetch_quotes_batch(tickers, market="US"):
             ticker_map[yf_t] = t
         symbols = " ".join(yf_tickers)
     else:
-        symbols = " ".join(tickers)
-        ticker_map = {t: t for t in tickers}
+        symbols = " ".join(actual_tickers)
+        ticker_map = {t: t for t in actual_tickers}
 
     try:
         batch = yf.Tickers(symbols)
@@ -193,8 +213,19 @@ def fetch_quotes_batch(tickers, market="US"):
     except Exception:
         pass
     if quotes:
-        _cache_set(cache_key, quotes)
-    return quotes
+        cache_set(cache_key, quotes)
+        # 回填 yfinance 结果到 stock_store DB
+        try:
+            from server.modules.stock_store.service import get_stock_store_service
+            get_stock_store_service().save_latest_quotes(market, quotes)
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+    # 合并 DB 缓存命中的结果
+    all_quotes = {**db_fresh, **quotes}
+    return all_quotes
 
 
 def _parse_option_df(df):
@@ -233,7 +264,7 @@ def _yf_retry(fn, max_retries=3):
 
 def fetch_option_expiry_dates(code, market="US"):
     cache_key = f"opt_expiry:{code}:{market}"
-    cached = _cache_get(cache_key)
+    cached = cache_get(cache_key)
     if cached is not None:
         return cached
     try:
@@ -245,7 +276,7 @@ def fetch_option_expiry_dates(code, market="US"):
 
         result = _yf_retry(_fetch)
         if result:
-            _cache_set(cache_key, result)
+            cache_set(cache_key, result)
         return result
     except Exception as e:
         logger.error(f"获取期权到期日失败 [{code}]: {e}")
@@ -254,7 +285,7 @@ def fetch_option_expiry_dates(code, market="US"):
 
 def fetch_option_chain(code, market="US", expiry_date=None):
     cache_key = f"opt_chain:{code}:{market}:{expiry_date}"
-    cached = _cache_get(cache_key)
+    cached = cache_get(cache_key)
     if cached is not None:
         return cached
     try:
@@ -262,7 +293,7 @@ def fetch_option_chain(code, market="US", expiry_date=None):
 
         # 优先从缓存获取到期日列表，避免重复请求
         expiry_cache_key = f"opt_expiry:{code}:{market}"
-        available_dates = _cache_get(expiry_cache_key)
+        available_dates = cache_get(expiry_cache_key)
 
         if available_dates is None:
             def _fetch_dates():
@@ -270,7 +301,7 @@ def fetch_option_chain(code, market="US", expiry_date=None):
                 return list(s.options)
             available_dates = _yf_retry(_fetch_dates)
             if available_dates:
-                _cache_set(expiry_cache_key, available_dates)
+                cache_set(expiry_cache_key, available_dates)
 
         if not available_dates:
             return None
@@ -281,7 +312,7 @@ def fetch_option_chain(code, market="US", expiry_date=None):
 
         # 更新 cache_key（expiry_date 现在确定了）
         cache_key = f"opt_chain:{code}:{market}:{expiry_date}"
-        cached = _cache_get(cache_key)
+        cached = cache_get(cache_key)
         if cached is not None:
             return cached
 
@@ -303,7 +334,7 @@ def fetch_option_chain(code, market="US", expiry_date=None):
             "calls": _parse_option_df(chain.calls),
             "puts": _parse_option_df(chain.puts),
         }
-        _cache_set(cache_key, result)
+        cache_set(cache_key, result)
         return result
     except Exception as e:
         logger.error(f"获取期权链失败 [{code}] expiry={expiry_date}: {e}")

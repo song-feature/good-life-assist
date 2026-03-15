@@ -6,7 +6,7 @@ import {
   ResponsiveContainer, Area,
 } from 'recharts';
 
-const REFRESH_INTERVAL = 10; // seconds
+const REFRESH_INTERVAL = 5; // seconds
 
 const fmt = (v: number) =>
   v?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—';
@@ -343,59 +343,6 @@ function PositionTable({ positions }: { positions: Position[] }) {
   );
 }
 
-function AnalysisSection() {
-  const analysis = useStockStore((s) => s.analysis);
-  const analysisLoading = useStockStore((s) => s.loading.analysis);
-  const fetchAnalysis = useStockStore((s) => s.fetchAnalysis);
-  const portfolio = useStockStore((s) => s.portfolio);
-
-  useEffect(() => {
-    if (portfolio && !analysis && !analysisLoading) {
-      fetchAnalysis();
-    }
-  }, [portfolio]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (analysisLoading) {
-    return (
-      <div className="mt-8">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">分析建议</h2>
-        <div className="flex items-center gap-2 text-gray-400 py-10 justify-center">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          <span className="text-sm">分析数据加载中，请耐心等待...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (!analysis) return null;
-
-  return (
-    <div className="mt-8">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-gray-700">分析建议</h2>
-        <button
-          onClick={fetchAnalysis}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-150"
-        >
-          <RefreshCw className="w-3 h-3" />
-          刷新
-        </button>
-      </div>
-
-      <RecommendationsBlock />
-
-      <div className="bg-amber-50/80 border border-amber-200/60 rounded-xl p-3.5 flex items-start gap-2.5">
-        <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-        <p className="text-xs text-amber-800 leading-relaxed">
-          以上分析基于技术指标和期权数据，仅供参考。请结合基本面和市场环境综合判断。
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- Recommendations Block ---------- */
-
 function renderSimpleMarkdown(text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
@@ -408,11 +355,22 @@ function renderSimpleMarkdown(text: string) {
 
 function RecommendationsBlock() {
   const analysis = useStockStore((s) => s.analysis);
+  const analysisLoading = useStockStore((s) => s.loading.analysis);
+  const fetchAnalysis = useStockStore((s) => s.fetchAnalysis);
   const recommendations = useStockStore((s) => s.analysisRecommendations);
   const isLoading = useStockStore((s) => s.loading.analysis_recommendations);
   const fetchReco = useStockStore((s) => s.fetchAnalysisRecommendations);
+  const portfolio = useStockStore((s) => s.portfolio);
   const [triggered, setTriggered] = useState(false);
 
+  // Fetch analysis data first if not available
+  useEffect(() => {
+    if (portfolio && !analysis && !analysisLoading) {
+      fetchAnalysis();
+    }
+  }, [portfolio]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Then fetch recommendations once analysis is ready
   useEffect(() => {
     if (analysis && !recommendations && !isLoading && !triggered) {
       setTriggered(true);
@@ -420,10 +378,23 @@ function RecommendationsBlock() {
     }
   }, [analysis, recommendations, isLoading, triggered, fetchReco]);
 
+  if (!portfolio) return null;
+
+  if (analysisLoading && !analysis) {
+    return (
+      <div className="mt-6">
+        <div className="flex items-center gap-2 text-gray-400 py-8 justify-center">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm">分析数据加载中...</span>
+        </div>
+      </div>
+    );
+  }
+
   if (!analysis) return null;
 
   return (
-    <div className="mb-4">
+    <div className="mt-6">
       <div className="bg-white rounded-xl shadow-[0_1px_4px_rgba(0,0,0,0.06)] border border-gray-100/80 overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100/60">
           <div className="flex items-center gap-2">
@@ -457,6 +428,13 @@ function RecommendationsBlock() {
             <div className="text-center text-gray-400 text-xs py-4">暂无建议数据</div>
           )}
         </div>
+      </div>
+
+      <div className="mt-3 bg-amber-50/80 border border-amber-200/60 rounded-xl p-3.5 flex items-start gap-2.5">
+        <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+        <p className="text-xs text-amber-800 leading-relaxed">
+          以上分析基于技术指标和期权数据，仅供参考。请结合基本面和市场环境综合判断。
+        </p>
       </div>
     </div>
   );
@@ -593,7 +571,7 @@ export function PortfolioView() {
 
       <FundsCard funds={portfolio?.funds ?? null} todayPl={portfolio?.today_pl_total ?? 0} />
       <PositionTable positions={portfolio?.positions ?? []} />
-      <AnalysisSection />
+      <RecommendationsBlock />
     </div>
   );
 }

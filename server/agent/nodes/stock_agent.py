@@ -3,12 +3,19 @@ import json
 import logging
 from langchain_core.messages import AIMessage, SystemMessage
 
-from server.core.llm import create_llm_for_scope
+from server.core.llm import create_llm_for_scope, resolve_model_info
 from server.modules.registry import get_registry
 from server.agent.state import AgentState
-from server.agent.progress import emit_progress
+from server.agent.progress import emit_progress, emit_token, emit_usage, get_channel
 
 logger = logging.getLogger("server.agent.nodes.stock")
+
+_IM_SYSTEM_SUFFIX = (
+    "\n\n【重要】当前是 IM 通道，无法展示图表和页面。"
+    "请用文字详细描述所有数据和分析结果，确保用户不看图表也能完整理解。"
+    "对于持仓数据，请列出每只股票的代码、名称、数量、成本价、当前价、盈亏等关键信息。"
+    "对于技术分析，请用文字说明均线、RSI等指标的具体数值和含义。"
+)
 
 
 def stock_agent_node(state: AgentState) -> dict:
@@ -23,19 +30,30 @@ def stock_agent_node(state: AgentState) -> dict:
 
     tools = module.get_tools()
     system_prompt = module.get_system_prompt()
-    llm = create_llm_for_scope("module.stock.agent", temperature=0.3)
+    if get_channel() == "im":
+        system_prompt += _IM_SYSTEM_SUFFIX
+    scope = "module.stock.agent"
+    llm = create_llm_for_scope(scope, temperature=0.3)
+    provider, model_name = resolve_model_info(scope)
     llm_with_tools = llm.bind_tools(tools)
 
     messages = state.get("messages", [])
     full_messages = [SystemMessage(content=system_prompt)] + messages
 
     ui_commands = list(state.get("ui_commands", []))
+    total_input_tokens = 0
+    total_output_tokens = 0
 
     # ReAct loop: let the LLM decide which tools to call
     max_iterations = 5
     for _ in range(max_iterations):
         response = llm_with_tools.invoke(full_messages)
         full_messages.append(response)
+
+        # Accumulate usage from invoke calls
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            total_input_tokens += response.usage_metadata.get('input_tokens', 0)
+            total_output_tokens += response.usage_metadata.get('output_tokens', 0)
 
         if not response.tool_calls:
             break
@@ -70,12 +88,34 @@ def stock_agent_node(state: AgentState) -> dict:
                 tool_call_id=tool_call["id"],
             ))
 
-    # The last AI message (after all tool calls) is the final response
+    # Stream the final response
     final_response = full_messages[-1]
     if not isinstance(final_response, AIMessage):
-        # If the last message is a ToolMessage, invoke LLM once more for summary
+        # Last message is a ToolMessage — stream a new summary call
         emit_progress("generating", "正在生成分析报告...")
-        final_response = llm.invoke(full_messages)
+    else:
+        # Last message is a pre-generated AIMessage — discard it and re-stream
+        full_messages.pop()
+        emit_progress("generating", "正在生成分析报告...")
+
+    full_content = ""
+    stream_usage = None
+    for chunk in llm.stream(full_messages):
+        if chunk.content:
+            emit_token(chunk.content)
+            full_content += chunk.content
+        if hasattr(chunk, 'usage_metadata') and chunk.usage_metadata:
+            stream_usage = chunk.usage_metadata
+    if stream_usage:
+        total_input_tokens += stream_usage.get('input_tokens', 0)
+        total_output_tokens += stream_usage.get('output_tokens', 0)
+    usage = {
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
+        "total_tokens": total_input_tokens + total_output_tokens,
+    } if (total_input_tokens or total_output_tokens) else None
+    emit_usage(provider, model_name, usage)
+    final_response = AIMessage(content=full_content)
 
     return {
         "messages": [final_response],

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchJSON, putJSON, deleteJSON } from '../../api/client';
 import {
-  Settings, ToggleLeft, ToggleRight, ArrowLeft, Brain,
+  Settings, ToggleLeft, ToggleRight, Brain,
   ScrollText, RefreshCw, Trash2, Search, ChevronRight,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -100,27 +100,9 @@ export function AdminPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50/70">
-      <div className="max-w-4xl mx-auto py-8 px-4">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <Link
-            to="/"
-            className="p-2 rounded-xl hover:bg-gray-100 transition-all duration-150 active:scale-95"
-          >
-            <ArrowLeft className="w-5 h-5 text-gray-500" />
-          </Link>
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center shadow-sm">
-            <Settings className="w-4.5 h-4.5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-gray-800 leading-tight">系统管理</h1>
-            <p className="text-xs text-gray-400">模块配置与运行日志</p>
-          </div>
-        </div>
-
-        {/* Tab bar */}
-        <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
+    <div className="max-w-4xl mx-auto py-8 px-6">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
           <button
             onClick={() => setTab('settings')}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-all duration-150 ${
@@ -361,7 +343,6 @@ export function AdminPage() {
             </div>
           </>
         )}
-      </div>
     </div>
   );
 }

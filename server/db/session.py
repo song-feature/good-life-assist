@@ -45,7 +45,8 @@ def get_session() -> Session:
 
 def init_db():
     """建表（如果不存在）"""
-    from server.db.models import LLMModel, ModelAssignment, ModuleConfig  # noqa: F401
+    from server.db.models import LLMModel, ModelAssignment, ModuleConfig, ChannelConfig  # noqa: F401
+    from server.modules.stock_store.models import WatchlistItem, StockDailyPrice, StockLatestQuote  # noqa: F401
 
     engine = _get_engine()
     Base.metadata.create_all(engine)

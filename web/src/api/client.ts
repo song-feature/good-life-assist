@@ -6,6 +6,8 @@ export async function fetchSSE(
   handlers: {
     onMessage?: (data: { content: string }) => void;
     onUICommand?: (data: { module: string; action: string; data: Record<string, unknown> }) => void;
+    onProgress?: (data: { step: string; detail: string }) => void;
+    onUsage?: (data: { provider: string; model: string; usage: { input_tokens?: number; output_tokens?: number; total_tokens?: number } }) => void;
     onToolCall?: (data: { tool: string; args: Record<string, unknown> }) => void;
     onError?: (data: { message: string }) => void;
     onDone?: () => void;
@@ -55,6 +57,9 @@ export async function fetchSSE(
             case 'progress':
               handlers.onProgress?.(data);
               break;
+            case 'usage':
+              handlers.onUsage?.(data);
+              break;
             case 'tool_call':
               handlers.onToolCall?.(data);
               break;
@@ -83,6 +88,16 @@ export async function fetchJSON<T>(url: string): Promise<T> {
 export async function putJSON<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE}${url}`, {
     method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
+}
+
+export async function postJSON<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE}${url}`, {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });

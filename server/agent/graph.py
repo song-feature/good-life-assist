@@ -7,20 +7,30 @@ from langgraph.graph import StateGraph, START, END
 from server.agent.state import AgentState
 from server.agent.router import router_node
 from server.agent.nodes.stock_agent import stock_agent_node
-from server.agent.progress import emit_progress
-from server.core.llm import create_llm_for_scope
+from server.agent.progress import emit_progress, emit_token, emit_usage
+from server.core.llm import create_llm_for_scope, resolve_model_info
 
 logger = logging.getLogger("server.agent.graph")
 
 
 def chat_agent_node(state: AgentState) -> dict:
-    """通用聊天节点 - 直接调用 LLM"""
+    """通用聊天节点 - 流式调用 LLM"""
     emit_progress("chat_thinking", "正在思考回复...")
-    llm = create_llm_for_scope("agent.chat")
+    scope = "agent.chat"
+    llm = create_llm_for_scope(scope)
+    provider, model_name = resolve_model_info(scope)
     messages = state.get("messages", [])
-    response = llm.invoke(messages)
+    full_content = ""
+    usage = None
+    for chunk in llm.stream(messages):
+        if chunk.content:
+            emit_token(chunk.content)
+            full_content += chunk.content
+        if hasattr(chunk, 'usage_metadata') and chunk.usage_metadata:
+            usage = chunk.usage_metadata
+    emit_usage(provider, model_name, dict(usage) if usage else None)
     return {
-        "messages": [response],
+        "messages": [AIMessage(content=full_content)],
         "current_module": None,
     }
 

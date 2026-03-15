@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useModuleStore } from '../../stores/moduleStore';
 import { useStockStore } from '../../stores/stockStore';
@@ -7,14 +7,14 @@ import { ChatInput } from '../chat/ChatInput';
 import { Bot, Settings } from 'lucide-react';
 
 export function ChatPanel() {
-  const { messages, isStreaming, sendMessage, progressMessage } = useChatStore();
+  const { messages, isStreaming, sendMessage, progressSteps } = useChatStore();
   const handleUICommand = useModuleStore((s) => s.handleUICommand);
-  const { setPortfolio, setTrend, setOptionsChain, setAnalysis } = useStockStore();
+  const { setPortfolio, setTrend, setOptionsChain, setAnalysis, fetchPortfolio } = useStockStore();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, progressSteps]);
 
   const handleSend = async (content: string) => {
     await sendMessage(content, (cmd) => {
@@ -24,7 +24,7 @@ export function ChatPanel() {
       if (cmd.module === 'stock') {
         switch (cmd.action) {
           case 'show_portfolio':
-            setPortfolio(data as any);
+            fetchPortfolio();
             break;
           case 'show_trend':
             if (data.ticker) {
@@ -71,7 +71,7 @@ export function ChatPanel() {
             <p className="text-xs mt-1.5 text-gray-400">试试说"帮我看看我的持仓"</p>
           </div>
         )}
-        <MessageList messages={messages} isStreaming={isStreaming} progressMessage={progressMessage} />
+        <MessageList messages={messages} isStreaming={isStreaming} progressSteps={progressSteps} />
         <div ref={bottomRef} />
       </div>
       <ChatInput onSend={handleSend} disabled={isStreaming} />

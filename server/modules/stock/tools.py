@@ -3,6 +3,7 @@ import json
 import logging
 from langchain_core.tools import tool
 
+from server.agent.progress import get_channel
 from . import service
 
 logger = logging.getLogger("stock.tools")
@@ -10,18 +11,28 @@ logger = logging.getLogger("stock.tools")
 
 @tool
 def get_portfolio() -> dict:
-    """查询当前股票持仓和账户资金概览。返回持仓列表（每只股票的代码、名称、数量、成本价、现价、盈亏）和资金信息（总资产、现金、浮动盈亏）。"""
-    try:
+    """查询当前股票持仓和账户资金概览。触发前端展示持仓面板，数据由前端独立加载。"""
+    channel = get_channel()
+    if channel == "im":
+        # IM 通道：返回实际持仓数据供 LLM 总结
         data = service.get_portfolio_data()
-        data["_ui_command"] = {
-            "module": "stock",
-            "action": "show_portfolio",
-            "data": data,
+        if not data.get("positions"):
+            return {"message": "当前没有持仓数据", "positions": [], "funds": None}
+        return {
+            "positions": data.get("positions", []),
+            "funds": data.get("funds"),
+            "today_pl_total": data.get("today_pl_total", 0),
         }
-        return data
-    except Exception as e:
-        logger.error(f"get_portfolio 失败: {e}")
-        return {"error": str(e)}
+    else:
+        # Web 通道：返回 UI 指令，前端独立加载数据
+        return {
+            "message": "已触发持仓面板，前端正在加载数据",
+            "_ui_command": {
+                "module": "stock",
+                "action": "show_portfolio",
+                "data": {},
+            },
+        }
 
 
 @tool
@@ -29,11 +40,13 @@ def get_stock_trend(ticker: str, period: str = "1mo") -> dict:
     """获取指定股票的价格走势和技术指标。包括收盘价历史、MA5/MA20均线、RSI14、5日涨跌幅。参数: ticker-股票代码(如AAPL), period-时间范围(默认1mo)。"""
     try:
         data = service.get_stock_trend_data(ticker, period=period)
-        data["_ui_command"] = {
-            "module": "stock",
-            "action": "show_trend",
-            "data": data,
-        }
+        channel = get_channel()
+        if channel == "web":
+            data["_ui_command"] = {
+                "module": "stock",
+                "action": "show_trend",
+                "data": data,
+            }
         return data
     except Exception as e:
         logger.error(f"get_stock_trend 失败: {e}")
@@ -49,11 +62,13 @@ def get_options_chain(ticker: str, expiry_date: str = "") -> dict:
         if data is None:
             return {"error": f"未找到 {ticker} 的期权数据"}
         result = dict(data)
-        result["_ui_command"] = {
-            "module": "stock",
-            "action": "show_options",
-            "data": data,
-        }
+        channel = get_channel()
+        if channel == "web":
+            result["_ui_command"] = {
+                "module": "stock",
+                "action": "show_options",
+                "data": data,
+            }
         return result
     except Exception as e:
         logger.error(f"get_options_chain 失败: {e}")
@@ -67,11 +82,13 @@ def get_portfolio_analysis() -> dict:
         data = service.get_full_analysis()
         if "error" in data:
             return data
-        data["_ui_command"] = {
-            "module": "stock",
-            "action": "show_analysis",
-            "data": data,
-        }
+        channel = get_channel()
+        if channel == "web":
+            data["_ui_command"] = {
+                "module": "stock",
+                "action": "show_analysis",
+                "data": data,
+            }
         return data
     except Exception as e:
         logger.error(f"get_portfolio_analysis 失败: {e}")

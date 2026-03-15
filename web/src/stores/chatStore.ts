@@ -6,12 +6,28 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  usageInfo?: UsageInfo;
+}
+
+export interface ProgressStep {
+  step: string;
+  detail: string;
+}
+
+export interface UsageInfo {
+  provider: string;
+  model: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+  };
 }
 
 interface ChatState {
   messages: ChatMessage[];
   isStreaming: boolean;
-  progressMessage: string;
+  progressSteps: ProgressStep[];
   sendMessage: (
     content: string,
     onUICommand?: (cmd: { module: string; action: string; data: Record<string, unknown> }) => void,
@@ -25,7 +41,7 @@ const nextId = () => `msg-${++messageCounter}-${Date.now()}`;
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isStreaming: false,
-  progressMessage: '',
+  progressSteps: [],
 
   sendMessage: async (content, onUICommand) => {
     const userMsg: ChatMessage = {
@@ -46,7 +62,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       messages: [...s.messages, userMsg, assistantMsg],
       isStreaming: true,
-      progressMessage: '',
+      progressSteps: [],
     }));
 
     try {
@@ -67,7 +83,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
             onUICommand?.(cmd);
           },
           onProgress: (data) => {
-            set({ progressMessage: data.detail });
+            set((s) => ({
+              progressSteps: [...s.progressSteps, { step: data.step, detail: data.detail }],
+            }));
+          },
+          onUsage: (data) => {
+            set((s) => ({
+              messages: s.messages.map((m) =>
+                m.id === assistantId
+                  ? { ...m, usageInfo: { provider: data.provider, model: data.model, usage: data.usage } }
+                  : m,
+              ),
+            }));
           },
           onError: (data) => {
             set((s) => ({
@@ -79,14 +106,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }));
           },
           onDone: () => {
-            set({ isStreaming: false, progressMessage: '' });
+            set({ isStreaming: false });
           },
         },
       );
     } catch (e) {
       set((s) => ({
         isStreaming: false,
-        progressMessage: '',
+        progressSteps: [],
         messages: s.messages.map((m) =>
           m.id === assistantId
             ? { ...m, content: `连接失败: ${e}` }
@@ -96,5 +123,5 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  clearMessages: () => set({ messages: [], progressMessage: '' }),
+  clearMessages: () => set({ messages: [], progressSteps: [] }),
 }));

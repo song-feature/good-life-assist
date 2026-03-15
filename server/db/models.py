@@ -49,3 +49,15 @@ class ModuleConfig(Base):
     enabled = Column(Boolean, default=True)
     config_json = Column(Text, default="{}")
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class ChannelConfig(Base):
+    __tablename__ = "channel_configs"
+
+    channel_id = Column(String(100), primary_key=True)
+    channel_type = Column(String(50), nullable=False)  # "web" | "im"
+    enabled = Column(Boolean, default=False)
+    config_json = Column(Text, default="{}")
+    status = Column(String(50), default="stopped")  # stopped | running | error
+    status_message = Column(Text, default="")
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

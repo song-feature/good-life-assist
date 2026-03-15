@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from server.db.session import get_session
 from server.db.repositories import (
     LLMModelRepository, ModelAssignmentRepository, ModuleConfigRepository,
+    ChannelConfigRepository,
 )
 from server.db.crypto import decrypt_api_key
 from server.config import get_settings
@@ -233,9 +234,89 @@ class ModuleConfigService:
             session.close()
 
 
+# ==================== Channel Config Service ====================
+
+class ChannelConfigService:
+    """通道配置服务"""
+
+    def get_config(self, channel_id: str) -> dict | None:
+        session = get_session()
+        try:
+            repo = ChannelConfigRepository(session)
+            obj = repo.get(channel_id)
+            if obj:
+                return json.loads(obj.config_json) if obj.config_json else {}
+            return None
+        finally:
+            session.close()
+
+    def get_raw(self, channel_id: str) -> dict | None:
+        """获取完整记录（含未脱敏配置）"""
+        session = get_session()
+        try:
+            repo = ChannelConfigRepository(session)
+            obj = repo.get(channel_id)
+            if obj:
+                return repo.to_dict(obj, mask_secrets=False)
+            return None
+        finally:
+            session.close()
+
+    def is_enabled(self, channel_id: str) -> bool:
+        session = get_session()
+        try:
+            repo = ChannelConfigRepository(session)
+            obj = repo.get(channel_id)
+            return obj.enabled if obj else False
+        finally:
+            session.close()
+
+    def upsert(self, channel_id: str, channel_type: str, enabled: bool = False,
+               config: dict | None = None):
+        session = get_session()
+        try:
+            repo = ChannelConfigRepository(session)
+            repo.upsert(channel_id, channel_type, enabled, config)
+        finally:
+            session.close()
+
+    def update_enabled(self, channel_id: str, enabled: bool):
+        session = get_session()
+        try:
+            repo = ChannelConfigRepository(session)
+            repo.update_enabled(channel_id, enabled)
+        finally:
+            session.close()
+
+    def update_config(self, channel_id: str, config: dict):
+        session = get_session()
+        try:
+            repo = ChannelConfigRepository(session)
+            repo.update_config(channel_id, config)
+        finally:
+            session.close()
+
+    def update_status(self, channel_id: str, status: str, message: str = ""):
+        session = get_session()
+        try:
+            repo = ChannelConfigRepository(session)
+            repo.update_status(channel_id, status, message)
+        finally:
+            session.close()
+
+    def get_all(self) -> list[dict]:
+        session = get_session()
+        try:
+            repo = ChannelConfigRepository(session)
+            return [repo.to_dict(c) for c in repo.get_all()]
+        finally:
+            session.close()
+
+
 # 单例
 _llm_service: LLMService | None = None
 _module_config_service: ModuleConfigService | None = None
+_channel_config_service: ChannelConfigService | None = None
 
 
 def get_llm_service() -> LLMService:
@@ -250,3 +331,10 @@ def get_module_config_service() -> ModuleConfigService:
     if _module_config_service is None:
         _module_config_service = ModuleConfigService()
     return _module_config_service
+
+
+def get_channel_config_service() -> ChannelConfigService:
+    global _channel_config_service
+    if _channel_config_service is None:
+        _channel_config_service = ChannelConfigService()
+    return _channel_config_service

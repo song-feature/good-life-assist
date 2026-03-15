@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from server.config import get_settings
 from server.modules.registry import get_registry
+from server.channels.registry import get_channel_registry
 from server.core.log_collector import install_log_handler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
@@ -27,7 +28,31 @@ async def lifespan(app: FastAPI):
     registry = get_registry()
     registry.discover_modules()
     logger.info(f"已注册 {len(registry.modules)} 个模块: {list(registry.modules.keys())}")
+
+    # 启动已启用模块的后台任务（如股价抓取线程）
+    for module in registry.get_enabled_modules():
+        try:
+            module.on_enable()
+        except Exception as e:
+            logger.warning(f"模块启动失败 {module.module_id}: {e}")
+
+    # 初始化通道系统
+    channel_registry = get_channel_registry()
+    channel_registry.discover_channels()
+    channel_registry.start_enabled_channels()
+    logger.info(f"已注册 {len(channel_registry.channels)} 个通道: {list(channel_registry.channels.keys())}")
+
     yield
+
+    # 停止模块后台任务
+    for module in registry.get_enabled_modules():
+        try:
+            module.on_disable()
+        except Exception:
+            pass
+
+    # 关闭通道
+    channel_registry.stop_all_channels()
     logger.info("服务关闭")
 
 
@@ -44,10 +69,12 @@ app.add_middleware(
 from server.api.chat import router as chat_router
 from server.api.admin import router as admin_router
 from server.api.modules.stock import router as stock_router
+from server.api.channels import router as channel_router
 
 app.include_router(chat_router, prefix="/api")
 app.include_router(admin_router, prefix="/api/admin")
 app.include_router(stock_router, prefix="/api/modules/stock")
+app.include_router(channel_router, prefix="/api/admin")
 
 
 @app.get("/api/health")

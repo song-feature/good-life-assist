@@ -139,7 +139,7 @@ def generate_options_wall_summary(wall_data: dict) -> str:
     prompt_filled = prompt_template.replace("{data}", data_text)
 
     try:
-        llm = create_llm(temperature=0.3)
+        llm = create_llm_for_scope("module.stock.options_wall", temperature=0.3)
         resp = llm.invoke([
             SystemMessage(content="你是一位专业的美股期权分析师。"),
             HumanMessage(content=prompt_filled),

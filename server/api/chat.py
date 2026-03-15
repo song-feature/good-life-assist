@@ -1,4 +1,4 @@
-"""聊天 SSE 端点 - 支持实时进度推送"""
+"""聊天 SSE 端点 - 支持实时进度推送和流式 token 输出"""
 import json
 import logging
 import asyncio
@@ -11,7 +11,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 from server.core.schemas import ChatRequest
 from server.agent.graph import get_graph
-from server.agent.progress import progress_queue
+from server.agent.progress import progress_queue, channel_context, session_data
 
 logger = logging.getLogger("server.api.chat")
 router = APIRouter(tags=["chat"])
@@ -37,6 +37,10 @@ async def chat_stream(request: ChatRequest):
         q: queue.Queue = queue.Queue()
         ctx = contextvars.copy_context()
         ctx.run(progress_queue.set, q)
+        ctx.run(channel_context.set, "web")
+        ctx.run(session_data.set, {})
+
+        tokens_streamed = False
 
         try:
             loop = asyncio.get_event_loop()
@@ -46,11 +50,18 @@ async def chat_stream(request: ChatRequest):
                 lambda: ctx.run(graph.invoke, input_state),
             )
 
-            # 边消费进度事件边等待结果
+            # 边消费事件边等待结果
             while not future.done():
                 try:
                     event = await asyncio.to_thread(q.get, timeout=0.1)
-                    yield _format_sse("progress", event)
+                    evt_type = event.get("_type")
+                    if evt_type == "token":
+                        tokens_streamed = True
+                        yield _format_sse("message", {"content": event["content"]})
+                    elif evt_type == "usage":
+                        yield _format_sse("usage", {"provider": event.get("provider", ""), "model": event.get("model", ""), "usage": event.get("usage", {})})
+                    else:
+                        yield _format_sse("progress", {"step": event.get("step", ""), "detail": event.get("detail", "")})
                 except queue.Empty:
                     continue
 
@@ -60,7 +71,14 @@ async def chat_stream(request: ChatRequest):
             while not q.empty():
                 try:
                     event = q.get_nowait()
-                    yield _format_sse("progress", event)
+                    evt_type = event.get("_type")
+                    if evt_type == "token":
+                        tokens_streamed = True
+                        yield _format_sse("message", {"content": event["content"]})
+                    elif evt_type == "usage":
+                        yield _format_sse("usage", {"provider": event.get("provider", ""), "model": event.get("model", ""), "usage": event.get("usage", {})})
+                    else:
+                        yield _format_sse("progress", {"step": event.get("step", ""), "detail": event.get("detail", "")})
                 except queue.Empty:
                     break
 
@@ -68,11 +86,12 @@ async def chat_stream(request: ChatRequest):
             for cmd in result.get("ui_commands", []):
                 yield _format_sse("ui_command", cmd)
 
-            # Send the final message
-            messages = result.get("messages", [])
-            for msg in messages:
-                if isinstance(msg, AIMessage) and msg.content:
-                    yield _format_sse("message", {"content": msg.content})
+            # Send the final message only if not already streamed
+            if not tokens_streamed:
+                messages = result.get("messages", [])
+                for msg in messages:
+                    if isinstance(msg, AIMessage) and msg.content:
+                        yield _format_sse("message", {"content": msg.content})
 
             yield _format_sse("done", {})
 
