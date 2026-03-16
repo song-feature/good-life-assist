@@ -1,0 +1,13 @@
+{
+  "stock": {
+    "enabled": true,
+    "config": {
+      "futu_host": "127.0.0.1",
+      "futu_port": 11111,
+      "market": "US",
+      "env": "REAL",
+      "prompt_options_wall": "你是一位专业的美股期权分析师。请根据以下期权持仓量数据分析关键支撑位和阻力位。\n\n{data}\n\n请用中文简洁回答（150字以内，不使用 markdown）：\n1) 短期关键支撑和阻力在哪里\n2) Max Pain 暗示的收盘磁吸方向\n3) 做市商对冲可能如何影响股价",
+      "prompt_recommendations": "你是一位专业的股票投资顾问。请根据以下持仓技术分析和期权数据给出操作建议。\n\n{data}\n\n要求：\n- 每只股票一条建议（一句话）\n- 最后给整体组合判断\n- 总字数300字以内，使用 markdown **加粗** 强调\n- 末尾加风险提示"
+    }
+  }
+}
